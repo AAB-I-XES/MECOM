@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pulse — Social</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- App stylesheet -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===================== LOGIN SECTION ===================== -->
+  <section id="login-section">
+    <div class="login-wrapper">
+
+      <!-- Decorative background blobs -->
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+
+      <!-- Logo / branding -->
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1 class="brand-name">Pulse</h1>
+      </div>
+      <p class="brand-tagline">Share moments. Connect people.</p>
+
+      <!-- Login card -->
+      <div class="login-card">
+
+        <!-- OTP Email Login -->
+        <div id="otp-step-1">
+          <h2 class="card-title">Sign in</h2>
+          <p class="card-subtitle">Enter your email to receive a magic link</p>
+
+          <div class="input-group">
+            <label for="email-input">Email address</label>
+            <input
+              type="email"
+              id="email-input"
+              placeholder="you@example.com"
+              autocomplete="email"
+            />
+          </div>
+
+          <button class="btn btn-primary btn-full" id="send-otp-btn">
+            <span class="btn-text">Send Magic Link</span>
+            <span class="btn-loader" hidden>Sending…</span>
+          </button>
+        </div>
+
+        <!-- OTP Verification Step -->
+        <div id="otp-step-2" hidden>
+          <h2 class="card-title">Check your inbox</h2>
+          <p class="card-subtitle">Enter the 6-digit code we sent to <strong id="otp-email-display"></strong></p>
+
+          <div class="input-group">
+            <label for="otp-input">One-time code</label>
+            <input
+              type="text"
+              id="otp-input"
+              placeholder="123456"
+              maxlength="6"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+            />
+          </div>
+
+          <button class="btn btn-primary btn-full" id="verify-otp-btn">
+            <span class="btn-text">Verify Code</span>
+            <span class="btn-loader" hidden>Verifying…</span>
+          </button>
+          <button class="btn btn-ghost btn-full" id="back-to-email-btn">← Use a different email</button>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider"><span>or continue with</span></div>
+
+        <!-- Social Login Buttons -->
+        <div class="social-buttons">
+          <button class="btn btn-social" id="google-login-btn">
+            <!-- Google SVG Icon -->
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.64 9.2045c0-.638-.0573-1.252-.164-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087C16.6582 14.252 17.64 11.9455 17.64 9.2045z" fill="#4285F4"/>
+              <path d="M9 18c2.43 0 4.4673-.8064 5.9564-2.1804l-2.9087-2.2581c-.8064.54-1.8368.8591-3.0477.8591-2.3436 0-4.3282-1.5841-5.0359-3.7104H.9574v2.3318C2.4382 15.9836 5.4818 18 9 18z" fill="#34A853"/>
+              <path d="M3.9641 10.71C3.7845 10.17 3.6818 9.5945 3.6818 9s.1027-1.17.2823-1.71V4.9582H.9574C.3477 6.1732 0 7.5477 0 9s.3477 2.8268.9573 4.0418L3.9641 10.71z" fill="#FBBC05"/>
+              <path d="M9 3.5795c1.3214 0 2.5077.4545 3.4405 1.346l2.5814-2.5814C13.4627.8918 11.4255 0 9 0 5.4818 0 2.4382 2.0164.9573 4.9582L3.964 7.29C4.6718 5.1636 6.6564 3.5795 9 3.5795z" fill="#EA4335"/>
+            </svg>
+            Google
+          </button>
+
+          <button class="btn btn-social" id="facebook-login-btn">
+            <!-- Facebook SVG Icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2" xmlns="http://www.w3.org/2000/svg">
+              <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+            </svg>
+            Facebook
+          </button>
+
+          <button class="btn btn-social" id="discord-login-btn">
+            <!-- Discord SVG Icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#5865F2" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286z"/>
+            </svg>
+            Discord
+          </button>
+        </div>
+
+      </div>
+      <!-- End login card -->
+
+    </div>
+  </section>
+  <!-- End login section -->
+
+
+  <!-- ===================== ONBOARDING: SET USERNAME ===================== -->
+  <section id="username-section" hidden>
+    <div class="login-wrapper">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1 class="brand-name">Pulse</h1>
+      </div>
+
+      <div class="login-card">
+        <h2 class="card-title">Pick a username</h2>
+        <p class="card-subtitle">This is how others will see you on Pulse.</p>
+
+        <div class="input-group">
+          <label for="username-input">Username</label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">@</span>
+            <input
+              type="text"
+              id="username-input"
+              placeholder="yourname"
+              maxlength="30"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="save-username-btn">
+          <span class="btn-text">Join Pulse</span>
+          <span class="btn-loader" hidden>Saving…</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ===================== MAIN APP SECTION ===================== -->
+  <section id="app-section" hidden>
+
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+      <div class="nav-inner">
+        <div class="nav-brand">
+          <span class="brand-dot small"></span>
+          <span class="nav-logo">Pulse</span>
+        </div>
+
+        <div class="nav-actions">
+          <div class="nav-user">
+            <div class="avatar-circle" id="nav-avatar"></div>
+            <span class="nav-username" id="nav-username-display">@username</span>
+          </div>
+          <button class="btn btn-outline btn-sm" id="logout-btn">Sign out</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Feed Layout -->
+    <main class="feed-layout">
+
+      <!-- Left sidebar (desktop only) -->
+      <aside class="sidebar-left">
+        <div class="sidebar-menu">
+          <a href="#" class="menu-item active">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Home
+          </a>
+          <a href="#" class="menu-item">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Explore
+          </a>
+          <a href="#" class="menu-item">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Profile
+          </a>
+        </div>
+      </aside>
+
+      <!-- Center feed -->
+      <div class="feed-center">
+
+        <!-- Post Composer -->
+        <div class="composer-card">
+          <div class="composer-top">
+            <div class="avatar-circle composer-avatar" id="composer-avatar"></div>
+            <textarea
+              id="post-input"
+              class="composer-textarea"
+              placeholder="What's on your mind?"
+              rows="3"
+              maxlength="500"
+            ></textarea>
+          </div>
+          <div class="composer-bottom">
+            <span class="char-count"><span id="char-remaining">500</span> left</span>
+            <button class="btn btn-primary btn-sm" id="post-btn">
+              <span class="btn-text">Post</span>
+              <span class="btn-loader" hidden>Posting…</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Feed Posts -->
+        <div id="feed-container">
+          <!-- Posts are injected here by app.js -->
+          <div class="feed-loading" id="feed-loading">
+            <div class="spinner"></div>
+            <span>Loading posts…</span>
+          </div>
+        </div>
+
+      </div>
+      <!-- End feed center -->
+
+      <!-- Right sidebar (desktop only) -->
+      <aside class="sidebar-right">
+        <div class="trending-card">
+          <h3 class="trending-title">Trending</h3>
+          <p class="trending-placeholder">Trending topics will appear here.</p>
+        </div>
+      </aside>
+
+    </main>
+
+  </section>
+  <!-- End app section -->
+
+
+  <!-- App JavaScript -->
+  <script src="app.js"></script>
+</body>
+</html>
