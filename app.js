@@ -8,8 +8,8 @@
 //    Replace the placeholders below with your actual project keys
 //    from https://supabase.com → Project Settings → API
 // ---------------------------------------------------------------
-const SUPABASE_URL      = 'https://lukbyowagziiyvfmdtlm.supabase.co';      
-const SUPABASE_ANON_KEY = 'sb_publishable_1DDELP4WU_UagI-qQ2Zjmg_gr_V9sQ9';  
+const SUPABASE_URL      = 'YOUR_SUPABASE_URL';       // e.g. https://xyzabc.supabase.co
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';  // e.g. eyJhbGciOiJIUzI1NiIsIn...
 
 // Initialise the Supabase client (using the CDN global `supabase`)
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -41,6 +41,9 @@ const discordLoginBtn  = document.getElementById('discord-login-btn');
 // ── Onboarding ──
 const usernameInput    = document.getElementById('username-input');
 const saveUsernameBtn  = document.getElementById('save-username-btn');
+const avatarUpload     = document.getElementById('avatar-upload');
+const avatarPreview    = document.getElementById('avatar-preview');
+const bioInput         = document.getElementById('bio-input');
 
 // ── App UI ──
 const navUsernameDisplay = document.getElementById('nav-username-display');
@@ -53,11 +56,45 @@ const feedContainer      = document.getElementById('feed-container');
 const feedLoading        = document.getElementById('feed-loading');
 const logoutBtn          = document.getElementById('logout-btn');
 
+const postMediaUpload     = document.getElementById('post-media-upload');
+const postMediaPreviewCtn = document.getElementById('post-media-preview-container');
+const postMediaPreview    = document.getElementById('post-media-preview');
+const postVideoPreview    = document.getElementById('post-video-preview');
+const removePostMediaBtn  = document.getElementById('remove-post-media-btn');
+
+// ── Navigation & Chat ──
+const menuHome     = document.getElementById('menu-home');
+const menuMessages = document.getElementById('menu-messages');
+const feedCenter   = document.getElementById('feed-center');
+const chatCenter   = document.getElementById('chat-center');
+const sidebarRight = document.getElementById('sidebar-right');
+
+const chatUserList          = document.getElementById('chat-user-list');
+const chatHeader            = document.getElementById('chat-header');
+const chatMessages          = document.getElementById('chat-messages');
+const chatComposer          = document.getElementById('chat-composer');
+const chatInput             = document.getElementById('chat-input');
+const chatSendBtn           = document.getElementById('chat-send-btn');
+const chatMediaUpload       = document.getElementById('chat-media-upload');
+const chatMicBtn            = document.getElementById('chat-mic-btn');
+const chatMediaPreviewCtn   = document.getElementById('chat-media-preview-container');
+const chatMediaPreviewName  = document.getElementById('chat-media-preview-name');
+const chatMediaRemoveBtn    = document.getElementById('chat-media-remove-btn');
+
 // ---------------------------------------------------------------
 // 3. APPLICATION STATE
 // ---------------------------------------------------------------
 let currentUser    = null;  // Supabase auth user object
 let currentProfile = null;  // Row from our `profiles` table
+let selectedPostMedia = null;
+let selectedPostMediaType = null;
+
+let activeChatUserId = null;
+let chatMessagesSubscription = null;
+let selectedChatMedia = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecordingVoiceNote = false;
 
 // ---------------------------------------------------------------
 // 4. UTILITY HELPERS
@@ -275,6 +312,8 @@ async function saveProfile(username) {
   if (!currentUser) return;
 
   username = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const bio = bioInput.value.trim();
+  const avatarFile = avatarUpload.files[0];
 
   if (!username || username.length < 3) {
     alert('Username must be at least 3 characters and contain only letters, numbers, or underscores.');
@@ -284,12 +323,33 @@ async function saveProfile(username) {
   setLoading(saveUsernameBtn, true);
 
   try {
+    let finalAvatarUrl = currentUser.user_metadata?.avatar_url || null;
+
+    // Upload new avatar if selected
+    if (avatarFile) {
+      const fileExt = avatarFile.name.split('.').pop();
+      const fileName = `${currentUser.id}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabaseClient.storage
+        .from('avatars')
+        .upload(fileName, avatarFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabaseClient.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+      
+      finalAvatarUrl = publicUrlData.publicUrl;
+    }
+
     const { error } = await supabaseClient
       .from('profiles')
       .upsert({
         id:         currentUser.id,
         username:   username,
-        avatar_url: currentUser.user_metadata?.avatar_url || null,
+        bio:        bio,
+        avatar_url: finalAvatarUrl,
         updated_at: new Date().toISOString(),
       });
 
@@ -301,7 +361,7 @@ async function saveProfile(username) {
     showSection('app');
 
   } catch (err) {
-    alert('Could not save username: ' + err.message);
+    alert('Could not save profile: ' + err.message);
   } finally {
     setLoading(saveUsernameBtn, false);
   }
@@ -317,7 +377,7 @@ async function saveProfile(username) {
 async function createPost() {
   const content = postInput.value.trim();
 
-  if (!content) {
+  if (!content && !selectedPostMedia) {
     alert('Post cannot be empty.');
     postInput.focus();
     return;
@@ -331,11 +391,34 @@ async function createPost() {
   setLoading(postBtn, true);
 
   try {
+    let mediaUrl = null;
+    let mediaType = null;
+
+    if (selectedPostMedia) {
+      const fileExt = selectedPostMedia.name.split('.').pop();
+      const fileName = `${currentUser.id}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from('post_media')
+        .upload(fileName, selectedPostMedia, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabaseClient.storage
+        .from('post_media')
+        .getPublicUrl(fileName);
+      
+      mediaUrl = publicUrlData.publicUrl;
+      mediaType = selectedPostMediaType;
+    }
+
     const { error } = await supabaseClient
       .from('posts')
       .insert({
         user_id:    currentUser.id,
         content:    content,
+        media_url:  mediaUrl,
+        media_type: mediaType,
         created_at: new Date().toISOString(),
       });
 
@@ -343,6 +426,15 @@ async function createPost() {
 
     // Clear textarea and refresh feed
     postInput.value         = '';
+    
+    // reset media
+    selectedPostMedia = null;
+    selectedPostMediaType = null;
+    postMediaUpload.value = '';
+    postMediaPreviewCtn.style.display = 'none';
+    postMediaPreview.src = '';
+    postVideoPreview.src = '';
+
     charRemaining.textContent = '500';
     charRemaining.closest('.char-count').className = 'char-count';
 
@@ -372,6 +464,8 @@ async function fetchAndRenderPosts() {
         content,
         created_at,
         user_id,
+        media_url,
+        media_type,
         profiles ( username, avatar_url )
       `)
       .order('created_at', { ascending: false })
@@ -410,15 +504,25 @@ async function fetchAndRenderPosts() {
       card.className  = 'post-card';
       card.dataset.id = post.id;
 
+      let mediaHtml = '';
+      if (post.media_url) {
+        if (post.media_type === 'video') {
+           mediaHtml = `<video src="${post.media_url}" controls style="max-height: 400px; width: 100%; border-radius: var(--radius-sm); margin-top: var(--space-sm);"></video>`;
+        } else {
+           mediaHtml = `<img src="${post.media_url}" style="max-height: 400px; width: 100%; object-fit: cover; border-radius: var(--radius-sm); margin-top: var(--space-sm);" />`;
+        }
+      }
+
       card.innerHTML = `
         <div class="post-header">
-          <div class="avatar-circle" aria-hidden="true">${initials}</div>
+          <div class="avatar-circle" aria-hidden="true" style="${post.profiles?.avatar_url ? `background: url('${post.profiles.avatar_url}'); background-size: cover; background-position: center; border: 1px solid var(--color-border);` : ''}">${post.profiles?.avatar_url ? '' : initials}</div>
           <div class="post-meta">
             <div class="post-username">@${username}</div>
             <div class="post-time">${timeAgo}</div>
           </div>
         </div>
         <p class="post-content">${escapeHtml(post.content)}</p>
+        ${mediaHtml}
         <div class="post-actions">
           <button class="post-action-btn like-btn" data-id="${post.id}" title="Like">
             <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -509,13 +613,28 @@ function initAppUI() {
   if (!currentProfile) return;
 
   const username = currentProfile.username;
+  const avatarUrl = currentProfile.avatar_url;
 
   // Navbar
   navUsernameDisplay.textContent = `@${username}`;
-  setAvatarInitials(navAvatar, username);
+  if (avatarUrl) {
+    navAvatar.style.backgroundImage = `url('${avatarUrl}')`;
+    navAvatar.style.backgroundSize = 'cover';
+    navAvatar.style.backgroundPosition = 'center';
+    navAvatar.textContent = '';
+  } else {
+    setAvatarInitials(navAvatar, username);
+  }
 
   // Composer
-  setAvatarInitials(composerAvatar, username);
+  if (avatarUrl) {
+    composerAvatar.style.backgroundImage = `url('${avatarUrl}')`;
+    composerAvatar.style.backgroundSize = 'cover';
+    composerAvatar.style.backgroundPosition = 'center';
+    composerAvatar.textContent = '';
+  } else {
+    setAvatarInitials(composerAvatar, username);
+  }
 }
 
 // ---------------------------------------------------------------
@@ -547,12 +666,64 @@ facebookLoginBtn.addEventListener('click', () => signInWithOAuth('facebook'));
 discordLoginBtn.addEventListener('click',  () => signInWithOAuth('discord'));
 
 // ── Username onboarding ──
+avatarUpload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      avatarPreview.style.backgroundImage = `url(${e.target.result})`;
+      avatarPreview.innerHTML = '';
+      avatarPreview.style.border = 'none';
+      avatarPreview.style.backgroundSize = 'cover';
+      avatarPreview.style.backgroundPosition = 'center';
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
 saveUsernameBtn.addEventListener('click', () => {
   saveProfile(usernameInput.value);
 });
 
 usernameInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') saveProfile(usernameInput.value);
+});
+
+postMediaUpload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  selectedPostMedia = file;
+  postMediaPreviewCtn.style.display = 'block';
+
+  if (file.type.startsWith('video/')) {
+    selectedPostMediaType = 'video';
+    postMediaPreview.style.display = 'none';
+    postVideoPreview.style.display = 'block';
+    
+    // Create an object URL for preview
+    const url = URL.createObjectURL(file);
+    postVideoPreview.src = url;
+  } else {
+    selectedPostMediaType = 'image';
+    postVideoPreview.style.display = 'none';
+    postMediaPreview.style.display = 'block';
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      postMediaPreview.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+removePostMediaBtn.addEventListener('click', () => {
+  selectedPostMedia = null;
+  selectedPostMediaType = null;
+  postMediaUpload.value = '';
+  postMediaPreviewCtn.style.display = 'none';
+  postMediaPreview.src = '';
+  postVideoPreview.src = '';
 });
 
 // ── Posting ──
@@ -576,6 +747,244 @@ postInput.addEventListener('input', () => {
   if (remaining <= 50)  counterEl.classList.add('warn');
   if (remaining <= 10)  counterEl.classList.add('danger');
 });
+
+// ── Navigation ──
+if (menuHome && menuMessages) {
+  menuHome.addEventListener('click', (e) => {
+    e.preventDefault();
+    menuHome.classList.add('active');
+    menuMessages.classList.remove('active');
+    feedCenter.style.display = 'flex';
+    chatCenter.style.display = 'none';
+    if (window.innerWidth >= 1024) sidebarRight.style.display = 'block';
+  });
+
+  menuMessages.addEventListener('click', (e) => {
+    e.preventDefault();
+    menuMessages.classList.add('active');
+    menuHome.classList.remove('active');
+    feedCenter.style.display = 'none';
+    sidebarRight.style.display = 'none';
+    chatCenter.style.display = 'flex';
+    loadChatUsers();
+  });
+}
+
+// ── Chats ──
+
+async function loadChatUsers() {
+  try {
+    const { data: users, error } = await supabaseClient
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .neq('id', currentUser.id)
+      .order('username');
+    if (error) throw error;
+    
+    chatUserList.innerHTML = '';
+    users.forEach(u => {
+      const initials = getInitials(u.username);
+      const el = document.createElement('div');
+      el.style.cssText = 'padding: 10px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; transition: background 0.15s;';
+      el.className = 'chat-user-item';
+      
+      el.innerHTML = `
+        <div class="avatar-circle" style="width: 32px; height: 32px; font-size: 0.75rem; border: 1px solid var(--color-border); ${u.avatar_url ? `background: url('${u.avatar_url}') center/cover;` : ''}">${u.avatar_url ? '' : initials}</div>
+        <div style="font-weight: 600; font-size: 0.9rem;">@${u.username}</div>
+      `;
+      el.addEventListener('mouseover', () => { el.style.background = 'var(--color-border)' });
+      el.addEventListener('mouseout', () => { if (activeChatUserId !== u.id) el.style.background = 'transparent' });
+      
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.chat-user-item').forEach(i => i.style.background = 'transparent');
+        el.style.background = 'var(--color-border)';
+        openChat(u);
+      });
+      chatUserList.appendChild(el);
+    });
+  } catch(err) {
+    console.error('Error loading users', err);
+  }
+}
+
+async function openChat(user) {
+  activeChatUserId = user.id;
+  const initials = getInitials(user.username);
+  
+  chatHeader.innerHTML = `
+    <div class="avatar-circle" style="width: 32px; height: 32px; font-size: 0.75rem; border: 1px solid var(--color-border); ${user.avatar_url ? `background: url('${user.avatar_url}') center/cover;` : ''}">${user.avatar_url ? '' : initials}</div>
+    <span>@${user.username}</span>
+  `;
+  chatComposer.style.visibility = 'visible';
+  chatMessages.innerHTML = '<div style="margin: auto; color: var(--color-text-muted);">Loading messages...</div>';
+  
+  clearChatMedia();
+  
+  if (chatMessagesSubscription) supabaseClient.removeChannel(chatMessagesSubscription);
+
+  const roomId = [currentUser.id, user.id].sort().join('_');
+  await fetchChatMessages(roomId);
+  
+  chatMessagesSubscription = supabaseClient
+    .channel('public:messages')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, payload => {
+       renderMessage(payload.new, true);
+    })
+    .subscribe();
+}
+
+async function fetchChatMessages(roomId) {
+  try {
+    const { data: msgs, error } = await supabaseClient
+      .from('messages')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true });
+      
+    if (error) throw error;
+    
+    chatMessages.innerHTML = '';
+    msgs.forEach(m => renderMessage(m, false));
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  } catch(err) {
+    console.error('Error fetching messages', err);
+  }
+}
+
+function renderMessage(msg, scroll = true) {
+  const isMine = msg.sender_id === currentUser.id;
+  const el = document.createElement('div');
+  el.style.cssText = `max-width: 70%; padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.95rem; line-height: 1.4; align-self: ${isMine ? 'flex-end' : 'flex-start'}; background: ${isMine ? 'var(--color-accent)' : 'var(--color-border)'}; color: ${isMine ? '#fff' : 'var(--color-text)'};`;
+  
+  let mediaHtml = '';
+  if (msg.media_url) {
+    if (msg.media_type === 'audio') {
+      mediaHtml = `<audio src="${msg.media_url}" controls style="width: 250px; height: 32px; outline: none; margin-bottom: 6px;"></audio><br/>`;
+    } else if (msg.media_type === 'video') {
+      mediaHtml = `<video src="${msg.media_url}" controls style="max-width: 100%; border-radius: var(--radius-sm); margin-bottom: 6px;"></video><br/>`;
+    } else {
+      mediaHtml = `<img src="${msg.media_url}" style="max-width: 100%; border-radius: var(--radius-sm); margin-bottom: 6px;" /><br/>`;
+    }
+  }
+  
+  let contentHtml = msg.content ? escapeHtml(msg.content) : '';
+  el.innerHTML = mediaHtml + contentHtml;
+  
+  chatMessages.appendChild(el);
+  if (scroll) chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+chatMediaUpload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  selectedChatMedia = file;
+  chatMediaPreviewName.textContent = `Attached: ${file.name}`;
+  chatMediaPreviewCtn.style.display = 'flex';
+});
+
+function clearChatMedia() {
+  selectedChatMedia = null;
+  chatMediaUpload.value = '';
+  chatMediaPreviewCtn.style.display = 'none';
+  chatMediaPreviewName.textContent = '';
+}
+
+chatMediaRemoveBtn.addEventListener('click', clearChatMedia);
+
+chatMicBtn.addEventListener('click', async () => {
+  if (isRecordingVoiceNote) {
+    mediaRecorder.stop();
+    isRecordingVoiceNote = false;
+    chatMicBtn.style.color = 'inherit';
+    chatMicBtn.innerHTML = `<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>`;
+  } else {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const file = new File([audioBlob], `voicenote_${Date.now()}.webm`, { type: 'audio/webm' });
+        selectedChatMedia = file;
+        chatMediaPreviewName.textContent = `Attached: Voice Note (${(audioBlob.size/1024).toFixed(1)}KB)`;
+        chatMediaPreviewCtn.style.display = 'flex';
+        stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorder.start();
+      isRecordingVoiceNote = true;
+      chatMicBtn.style.color = '#EF4444';
+      chatMicBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>`;
+    } catch(err) {
+      alert("Microphone access denied");
+    }
+  }
+});
+
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendChatMessage();
+});
+chatSendBtn.addEventListener('click', sendChatMessage);
+
+async function sendChatMessage() {
+  if (!activeChatUserId) return;
+  const content = chatInput.value.trim();
+  
+  if (!content && !selectedChatMedia) return;
+  
+  chatSendBtn.disabled = true;
+  chatSendBtn.textContent = '...';
+  
+  try {
+    let mediaUrl = null;
+    let mediaType = null;
+
+    if (selectedChatMedia) {
+      const isVoice = selectedChatMedia.name.startsWith('voicenote');
+      const fileExt = selectedChatMedia.name.split('.').pop();
+      const fileName = `${currentUser.id}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from('chat_media')
+        .upload(fileName, selectedChatMedia, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabaseClient.storage
+        .from('chat_media')
+        .getPublicUrl(fileName);
+      
+      mediaUrl = publicUrlData.publicUrl;
+      if (isVoice || selectedChatMedia.type.startsWith('audio/')) mediaType = 'audio';
+      else if (selectedChatMedia.type.startsWith('video/')) mediaType = 'video';
+      else mediaType = 'photo';
+    }
+
+    const roomId = [currentUser.id, activeChatUserId].sort().join('_');
+
+    const { error } = await supabaseClient
+      .from('messages')
+      .insert({
+        room_id:    roomId,
+        sender_id:  currentUser.id,
+        content:    content,
+        media_url:  mediaUrl,
+        media_type: mediaType,
+      });
+
+    if (error) throw error;
+
+    chatInput.value = '';
+    clearChatMedia();
+    
+    // UI rendering happens automatically via Postgres Subscription
+  } catch (err) {
+    alert('Could not send message: ' + err.message);
+  } finally {
+    chatSendBtn.disabled = false;
+    chatSendBtn.textContent = 'Send';
+  }
+}
 
 // ── Logout ──
 logoutBtn.addEventListener('click', logout);
@@ -639,6 +1048,7 @@ create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   username    text unique not null,
   avatar_url  text,
+  bio         text,
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
 );
@@ -648,12 +1058,26 @@ create table if not exists public.posts (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references public.profiles(id) on delete cascade,
   content     text not null,
+  media_url   text,
+  media_type  text,
+  created_at  timestamptz default now()
+);
+
+-- messages table
+create table if not exists public.messages (
+  id          uuid primary key default gen_random_uuid(),
+  room_id     text not null,
+  sender_id   uuid not null references public.profiles(id) on delete cascade,
+  content     text,
+  media_url   text,
+  media_type  text,
   created_at  timestamptz default now()
 );
 
 -- Row-level security: every authenticated user can read all posts
 alter table public.profiles enable row level security;
 alter table public.posts     enable row level security;
+alter table public.messages  enable row level security;
 
 create policy "Anyone can read profiles"
   on public.profiles for select using (true);
@@ -672,5 +1096,48 @@ create policy "Authenticated users can insert posts"
 
 create policy "Users can delete own posts"
   on public.posts for delete using (auth.uid() = user_id);
+
+-- Storage bucket for avatars (run this if you don't use the dashboard)
+insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true);
+
+create policy "Avatar images are publicly accessible."
+  on storage.objects for select using ( bucket_id = 'avatars' );
+
+create policy "Anyone can upload an avatar."
+  on storage.objects for insert with check ( bucket_id = 'avatars' );
+
+create policy "Anyone can update their own avatar."
+  on storage.objects for update using ( bucket_id = 'avatars' and auth.uid() = owner );
+
+-- Storage bucket for post media
+insert into storage.buckets (id, name, public) values ('post_media', 'post_media', true);
+
+create policy "Post media is publicly accessible."
+  on storage.objects for select using ( bucket_id = 'post_media' );
+
+create policy "Anyone can upload post media."
+  on storage.objects for insert with check ( bucket_id = 'post_media' and auth.role() = 'authenticated' );
+
+create policy "Users can delete own post media."
+  on storage.objects for delete using ( bucket_id = 'post_media' and auth.uid() = owner );
+
+-- Enable real-time for messages
+drop publication if exists supabase_realtime;
+create publication supabase_realtime for table messages;
+
+create policy "Users can read all messages (simplified)"
+  on public.messages for select using (true);
+
+create policy "Users can insert messages"
+  on public.messages for insert with check (auth.uid() = sender_id);
+
+-- Storage bucket for chat media
+insert into storage.buckets (id, name, public) values ('chat_media', 'chat_media', true);
+
+create policy "Chat media is publicly accessible."
+  on storage.objects for select using ( bucket_id = 'chat_media' );
+
+create policy "Anyone can upload chat media."
+  on storage.objects for insert with check ( bucket_id = 'chat_media' and auth.role() = 'authenticated' );
 
 ================================================================ */
