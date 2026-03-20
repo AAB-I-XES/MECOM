@@ -8,8 +8,8 @@
 //    Replace the placeholders below with your actual project keys
 //    from https://supabase.com → Project Settings → API
 // ---------------------------------------------------------------
-const SUPABASE_URL      = 'YOUR_SUPABASE_URL';       // e.g. https://xyzabc.supabase.co
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';  // e.g. eyJhbGciOiJIUzI1NiIsIn...
+const SUPABASE_URL      = 'https://lukbyowagziiyvfmdtlm.supabase.co';       // e.g. https://xyzabc.supabase.co
+const SUPABASE_ANON_KEY = 'sb_publishable_1DDELP4WU_UagI-qQ2Zjmg_gr_V9sQ9';  // e.g. eyJhbGciOiJIUzI1NiIsIn...
 
 // Initialise the Supabase client (using the CDN global `supabase`)
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
